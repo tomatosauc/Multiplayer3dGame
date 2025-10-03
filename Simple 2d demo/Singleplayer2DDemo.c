@@ -4,7 +4,7 @@
 #include "glad/glad.h"
 
 // Grid size
-#define GRID_SIZE 10
+#define GRID_SIZE 16
 
 // Player buffer
 int players[2][2] = {{0,0}, {9,9}};
@@ -28,31 +28,33 @@ void processInput(GLFWwindow* window) {
 
     if (t-playercooldown[0] > moveDelay) {// At this point, enough time has passed -- check held keys:
         if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-            if (players[0][1] < GRID_SIZE-1) { players[0][1]++; playercooldown[0] = t; return; }
+            if (players[0][1] < GRID_SIZE-1) { players[0][1]++; playercooldown[0] = t; }
         }
-        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-            if (players[0][1] > 0) { players[0][1]--; playercooldown[0] = t; return; }
+        else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+            if (players[0][1] > 0) { players[0][1]--; playercooldown[0] = t; }
         }
-        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-            if (players[0][0] > 0) { players[0][0]--; playercooldown[0] = t; return; }
+        else if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+            if (players[0][0] > 0) { players[0][0]--; playercooldown[0] = t; }
         }
-        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-            if (players[0][0] < GRID_SIZE-1) { players[0][0]++; playercooldown[0] = t; return; }
+        else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+            if (players[0][0] < GRID_SIZE-1) { players[0][0]++; playercooldown[0] = t; }
         }
     } if (t-playercooldown[1] > moveDelay) {
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-            if (players[1][1] < GRID_SIZE-1) { players[1][1]++; playercooldown[1] = t; return; }
+            if (players[1][1] < GRID_SIZE-1) { players[1][1]++; playercooldown[1] = t; }
         }
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-            if (players[1][1] > 0) { players[1][1]--; playercooldown[1] = t; return; }
+        else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            if (players[1][1] > 0) { players[1][1]--; playercooldown[1] = t; }
         }
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-            if (players[1][0] > 0) { players[1][0]--; playercooldown[1] = t; return; }
+        else if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            if (players[1][0] > 0) { players[1][0]--; playercooldown[1] = t; }
         }
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-            if (players[1][0] < GRID_SIZE-1) { players[1][0]++; playercooldown[1] = t; return; }
+        else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            if (players[1][0] < GRID_SIZE-1) { players[1][0]++; playercooldown[1] = t; }
         }
     }
+    // Do a tcp-sync packet here... basically something sending the movement to the server... or if the server, process the packet and send to all clients...
+    // Packet structure: 2 bits - client id (0=server), 5 bits - x coord, 5 bits - y c
 }
 
 
