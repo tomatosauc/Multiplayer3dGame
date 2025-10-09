@@ -2,14 +2,28 @@
 #include <stdio.h>
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+
+#define PORT 8080
+#define MAX  1024
+
+typedef struct {
+    int id;      // simple numeric ID
+    int fd;      // socket descriptor
+    int active;
+} client_t;
 
 // Grid size
 #define GRID_SIZE 16
 
 // Player buffer
-int players[2][2] = {{0,0}, {9,9}};
-float colors[2][3] = {{0.98f, 0.73f, 0.01f},{0.19f, 0.89f, 0.75f}};
-double playercooldown[2];
+int players[4][2] = {{14,14}, {1,1}};
+float colors[4][3] = {{0.98f, 0.73f, 0.01f},{0.19f, 0.89f, 0.75f}};
 
 // Callback for window resize
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -19,44 +33,29 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 // Handle input (ESC to close)
 void processInput(GLFWwindow* window) {
     const double moveDelay = 0.15; // seconds between moves while holding
+    double playercooldown = 0;
 
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, 1);
 
     double t = glfwGetTime();
-    if (t-playercooldown[0] < moveDelay && t-playercooldown[1] < moveDelay) {return;}
+    if (t-playercooldown < moveDelay) {return;}
 
-    if (t-playercooldown[0] > moveDelay) {// At this point, enough time has passed -- check held keys:
-        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-            if (players[0][1] < GRID_SIZE-1) { players[0][1]++; playercooldown[0] = t; }
-        }
-        else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-            if (players[0][1] > 0) { players[0][1]--; playercooldown[0] = t; }
-        }
-        else if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-            if (players[0][0] > 0) { players[0][0]--; playercooldown[0] = t; }
-        }
-        else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-            if (players[0][0] < GRID_SIZE-1) { players[0][0]++; playercooldown[0] = t; }
-        }
-    } if (t-playercooldown[1] > moveDelay) {
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-            if (players[1][1] < GRID_SIZE-1) { players[1][1]++; playercooldown[1] = t; }
-        }
-        else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-            if (players[1][1] > 0) { players[1][1]--; playercooldown[1] = t; }
-        }
-        else if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-            if (players[1][0] > 0) { players[1][0]--; playercooldown[1] = t; }
-        }
-        else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-            if (players[1][0] < GRID_SIZE-1) { players[1][0]++; playercooldown[1] = t; }
-        }
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        if (players[0][1] < GRID_SIZE-1) { players[0][1]++; playercooldown = t; }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        if (players[0][1] > 0) { players[0][1]--; playercooldown = t; }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        if (players[0][0] > 0) { players[0][0]--; playercooldown = t; }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        if (players[0][0] < GRID_SIZE-1) { players[0][0]++; playercooldown = t; }
     }
     // Do a tcp-sync packet here... basically something sending the movement to the server... or if the server, process the packet and send to all clients...
-    // Packet structure: 2 bits - client id (0=server), 5 bits - x coord, 5 bits - y c
+    // Packet structure: 2 bits - client id (0=server), 5 bits - x coord, 5 bits - y coord
 }
-
 
 // Vertex and fragment shader sources (inline for simplicity)
 const char* vertexShaderSource = "#version 330 core\n"
@@ -76,6 +75,40 @@ const char* fragmentShaderSource = "#version 330 core\n"
 "}\n";
 
 int main() {
+    // Setup TCP socket to listn for client connections
+    int listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (listenfd < 0) { perror("socket"); exit(1); }
+
+    int opt = 1;
+    setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in servaddr = {0};
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(PORT);
+
+    if (bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0) {
+        perror("bind"); exit(1);
+    }
+    if (listen(listenfd, 10) < 0) { perror("listen"); exit(1); }
+
+    fd_set master, read_fds;
+    FD_ZERO(&master);
+    FD_SET(listenfd, &master);
+    FD_SET(STDIN_FILENO, &master);
+    int fdmax = (listenfd > STDIN_FILENO) ? listenfd : STDIN_FILENO;
+
+    client_t clients[FD_SETSIZE];
+    for (int i = 0; i < FD_SETSIZE; i++) clients[i].active = 0;
+
+    int next_id = 1;
+
+    printf("Server listening on port %d\n", PORT);
+    printf("Commands from server console:\n");
+    printf("   <id> <message>   send message to a client\n");
+    printf("   exit             shut down server (sends exit to all)\n");
+
+
     // Initialize GLFW
     if (!glfwInit()) {
         printf("Failed to initialize GLFW\n");
